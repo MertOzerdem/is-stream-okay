@@ -315,6 +315,53 @@ test('shows a readable message when the test API returns an empty error response
   });
 });
 
+test('shows a readable message when the test API returns malformed JSON', async () => {
+  await withServer({}, async (baseUrl) => {
+    const browser = await chromium.launch({ headless: true });
+    const page = await browser.newPage();
+    try {
+      await page.route(`${baseUrl}/api/tests`, (route) => route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: 'not-json',
+      }));
+      await page.goto(baseUrl);
+      await page.locator('#stream-url').fill('https://twitch.tv/monstercat');
+      await page.locator('#submit-button').click();
+
+      const error = page.locator('#form-error');
+      await error.waitFor({ state: 'visible', timeout: 5000 });
+      assert.equal(await error.innerText(), 'Sunucudan geçerli bir yanıt alınamadı. Lütfen tekrar dene.');
+      assert.doesNotMatch(await error.innerText(), /Unexpected end of JSON input/);
+    } finally {
+      await browser.close();
+    }
+  });
+});
+
+test('shows a readable message when polling returns an empty error response', async () => {
+  let finishProbe;
+  await withServer({ runProbe: () => new Promise((resolve) => { finishProbe = resolve; }) }, async (baseUrl) => {
+    const browser = await chromium.launch({ headless: true });
+    const page = await browser.newPage();
+    try {
+      await page.route(`${baseUrl}/api/tests/*`, (route) => route.fulfill({ status: 502, body: '' }));
+      await page.goto(baseUrl);
+      await page.locator('#stream-url').fill('https://twitch.tv/monstercat');
+      await page.locator('#submit-button').click();
+
+      const error = page.locator('#form-error');
+      await error.waitFor({ state: 'visible', timeout: 5000 });
+      assert.equal(await error.innerText(), 'Sunucu geçici olarak yanıt veremedi (502). Lütfen tekrar dene.');
+      assert.doesNotMatch(await error.innerText(), /Unexpected end of JSON input/);
+    } finally {
+      await browser.close();
+      finishProbe?.({ state: 'online', observedSeconds: 1 });
+      await new Promise(setImmediate);
+    }
+  });
+});
+
 test('explains a Twitch playback block without reporting the channel as offline', async () => {
   await withServer({
     runProbe: async () => ({
