@@ -255,7 +255,7 @@ test('accepts a Kick channel and routes it through the independent test worker',
   });
 });
 
-test('limits concurrent server-side browser checks after playback starts', async () => {
+test('limits concurrent server-side browser checks to one active test', async () => {
   const releases = [];
   await withServer({
     runProbe: ({ onProgress }) => new Promise((resolve) => {
@@ -270,7 +270,7 @@ test('limits concurrent server-side browser checks after playback starts', async
     });
 
     assert.equal((await start()).status, 202);
-    assert.equal((await start()).status, 202);
+    await new Promise((resolve) => setImmediate(resolve));
     const limited = await start();
     assert.equal(limited.status, 429);
     releases.forEach((release) => release());
@@ -291,6 +291,54 @@ test('serves the no-login test page', async () => {
     const script = await fetch(`${baseUrl}/app.js`);
     assert.equal(script.status, 200);
     assert.match(script.headers.get('content-type'), /javascript/);
+  });
+});
+
+test('shows a readable message when the test API returns an empty error response', async () => {
+  await withServer({}, async (baseUrl) => {
+    const browser = await chromium.launch({ headless: true });
+    const page = await browser.newPage();
+    try {
+      await page.route(`${baseUrl}/api/tests`, (route) => route.fulfill({ status: 503, body: '' }));
+      await page.goto(baseUrl);
+      await page.locator('#stream-url').fill('https://twitch.tv/monstercat');
+      await page.locator('#submit-button').click();
+
+      const error = page.locator('#form-error');
+      await error.waitFor({ state: 'visible', timeout: 5000 });
+      assert.equal(await error.innerText(), 'Sunucu geçici olarak yanıt veremedi (503). Lütfen tekrar dene.');
+      assert.doesNotMatch(await error.innerText(), /Unexpected end of JSON input/);
+    } finally {
+      await browser.close();
+    }
+  });
+});
+
+test('explains a Twitch playback block without reporting the channel as offline', async () => {
+  await withServer({
+    runProbe: async () => ({
+      state: 'unavailable',
+      observedSeconds: 0,
+      completionMessage: 'Test ortamı oynatmayı başlatamadı.',
+      lastError: 'Twitch playback was blocked.',
+    }),
+  }, async (baseUrl) => {
+    const browser = await chromium.launch({ headless: true });
+    const page = await browser.newPage();
+    try {
+      await page.goto(baseUrl);
+      await page.locator('#stream-url').fill('https://twitch.tv/monstercat');
+      await page.locator('#submit-button').click();
+      await page.locator('#result-card').waitFor({ timeout: 5000 });
+
+      assert.equal(await page.locator('#result-title').innerText(), 'Test tamamlanamadı');
+      assert.equal(
+        await page.locator('#result-message').innerText(),
+        'Twitch oynatıcısı bu test ortamında oynatmayı engelledi. Bu sonuç kanalın çevrimdışı olduğu anlamına gelmez.',
+      );
+    } finally {
+      await browser.close();
+    }
   });
 });
 
