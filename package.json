@@ -1,0 +1,21 @@
+{
+  "name": "is-stream-okay",
+  "version": "1.0.0",
+  "main": "src/server.js",
+  "description": "A server-side public Twitch stream test.",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "type": "commonjs",
+  "dependencies": {
+    "playwright": "^1.64.1"
+  }
+}
+
