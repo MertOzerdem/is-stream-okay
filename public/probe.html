@@ -5,8 +5,9 @@
     <div id="twitch-player"></div>
     <script>
       (() => {
-        const channel = new URLSearchParams(location.search).get('channel');
-        const host = new URLSearchParams(location.search).get('parent') || location.hostname;
+        const parameters = new URLSearchParams(location.search);
+        const channel = parameters.get('channel');
+        const parents = [...new Set(parameters.getAll('parent').filter(Boolean))];
         const probe = { embedReady: false, playerReady: false, online: false, offline: false, playing: false, stats: null, qualities: [], error: null };
         window.__streamProbe = { snapshot: probe };
         const script = document.createElement('script');
@@ -20,7 +21,7 @@
             layout: 'video',
             autoplay: true,
             muted: true,
-            parent: [host],
+            parent: parents.length ? parents : [location.hostname],
           });
           window.__twitchEmbed = embed;
           probe.embedReady = true;
