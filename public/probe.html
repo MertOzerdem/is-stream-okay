@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Stream probe</title></head>
+  <body>
+    <div id="twitch-player"></div>
+    <script>
+      (() => {
+        const channel = new URLSearchParams(location.search).get('channel');
+        const host = new URLSearchParams(location.search).get('parent') || location.hostname;
+        const probe = { embedReady: false, playerReady: false, online: false, offline: false, playing: false, stats: null, qualities: [], error: null };
+        window.__streamProbe = { snapshot: probe };
+        const script = document.createElement('script');
+        script.src = 'https://embed.twitch.tv/embed/v1.js';
+        script.onerror = () => { probe.error = 'Twitch Embed API failed to load.'; };
+        script.onload = () => {
+          const embed = new Twitch.Embed('twitch-player', {
+            channel,
+            width: 800,
+            height: 450,
+            layout: 'video',
+            autoplay: true,
+            muted: true,
+            parent: [host],
+          });
+          window.__twitchEmbed = embed;
+          probe.embedReady = true;
+          embed.addEventListener(Twitch.Embed.VIDEO_READY, () => {
+            const player = embed.getPlayer();
+            window.__twitchPlayer = player;
+            probe.playerReady = true;
+            embed.addEventListener(Twitch.Player.ONLINE, () => { probe.online = true; probe.offline = false; });
+            embed.addEventListener(Twitch.Player.OFFLINE, () => { probe.offline = true; probe.online = false; });
+            embed.addEventListener(Twitch.Embed.VIDEO_PLAY, () => { probe.playing = true; probe.online = true; });
+            embed.addEventListener(Twitch.Player.PLAYBACK_BLOCKED, () => { probe.error = 'Twitch playback was blocked.'; });
+          });
+        };
+        document.head.appendChild(script);
+        setInterval(() => {
+          try {
+            const player = window.__twitchPlayer;
+            if (player) {
+              probe.stats = player.getPlaybackStats();
+              probe.qualities = player.getQualities()
+                .map((quality) => typeof quality === 'string' ? quality : quality?.name)
+                .filter((quality) => quality && quality.toLowerCase() !== 'auto');
+              if (player.getEnded()) {
+                probe.offline = true;
+                probe.online = false;
+              }
+            }
+          } catch (error) {
+            probe.error = error.message;
+          }
+        }, 1000);
+        window.addEventListener('error', (event) => { probe.error = event.message; });
+      })();
+    </script>
+  </body>
+</html>
+
