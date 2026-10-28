@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Kick stream probe</title></head>
+  <body>
+    <iframe
+      id="kick-player"
+      width="800"
+      height="450"
+      allow="autoplay; fullscreen; picture-in-picture"
+      allowfullscreen
+      title="Kick stream test player"></iframe>
+    <script>
+      const channel = new URLSearchParams(location.search).get('channel');
+      document.querySelector('#kick-player').src =
+        `https://player.kick.com/${encodeURIComponent(channel)}?autoplay=true&muted=true`;
+    </script>
+  </body>
+</html>
+
