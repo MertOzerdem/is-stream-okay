@@ -152,6 +152,18 @@ test('accepts a Twitch channel and returns a pollable test result', async () => 
   });
 });
 
+test('accepts the scheme-less Twitch link shown in the page example', async () => {
+  await withServer({ runProbe: async () => ({ state: 'online', observedSeconds: 30 }) }, async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/tests`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ url: 'twitch.tv/monstercat' }),
+    });
+
+    assert.equal(response.status, 202);
+  });
+});
+
 test('accepts a Kick channel and routes it through the independent test worker', async () => {
   await withServer({
     runProbe: async ({ platform, channel }) => ({ platform, state: 'online', observedSeconds: 30, channel }),
