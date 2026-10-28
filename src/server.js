@@ -207,7 +207,9 @@ async function runTwitchProbe({ channel, baseUrl, parent, onProgress, durationMs
   try {
     const probeUrl = new URL('/probe', baseUrl);
     probeUrl.searchParams.set('channel', channel);
-    probeUrl.searchParams.set('parent', parent || process.env.PUBLIC_HOSTNAME || new URL(baseUrl).hostname);
+    const internalParent = new URL(baseUrl).hostname;
+    const parentHosts = new Set([parent || process.env.PUBLIC_HOSTNAME || internalParent, internalParent]);
+    parentHosts.forEach((host) => probeUrl.searchParams.append('parent', host));
     await page.goto(probeUrl.toString(), { waitUntil: 'domcontentloaded', timeout: 45_000 });
     startupDeadline = Date.now() + 45_000;
     state = 'running';
