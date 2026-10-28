@@ -96,7 +96,9 @@ function parseStreamUrl(input) {
   if (typeof input !== 'string' || input.length > 2048) return null;
 
   try {
-    const url = new URL(input.trim());
+    const value = input.trim();
+    const normalized = /^[a-z][a-z\d+.-]*:\/\//i.test(value) ? value : `https://${value}`;
+    const url = new URL(normalized);
     if (url.protocol !== 'https:' || url.username || url.password || url.port) return null;
     const segments = url.pathname.split('/').filter(Boolean);
     if (segments.length !== 1) return null;
