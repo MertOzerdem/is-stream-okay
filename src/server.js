@@ -390,7 +390,7 @@ function createApp({ runProbe = runPlatformProbe } = {}) {
       if (!stream) return sendJson(res, 400, { error: 'Geçerli bir Twitch veya Kick kanal linki gir.' });
 
       const activeCount = [...jobs.values()].filter((job) => job.state !== 'complete').length;
-      if (activeCount >= MAX_ACTIVE_TESTS) return sendJson(res, 429, { error: 'Şu anda iki test sürüyor. Biraz sonra tekrar dene.' });
+      if (activeCount >= MAX_ACTIVE_TESTS) return sendJson(res, 429, { error: 'Şu anda bir test sürüyor. Biraz sonra tekrar dene.' });
 
       const id = crypto.randomUUID();
       const job = { id, ...stream, state: 'queued', elapsedSeconds: 0, createdAt: new Date().toISOString() };
