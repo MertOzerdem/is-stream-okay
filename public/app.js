@@ -56,6 +56,29 @@ function showError(message) {
   formError.hidden = false;
 }
 
+async function readJsonResponse(response) {
+  const rawBody = await response.text();
+  const unavailableMessage = response.ok
+    ? 'Sunucudan geçerli bir yanıt alınamadı. Lütfen tekrar dene.'
+    : `Sunucu geçici olarak yanıt veremedi (${response.status}). Lütfen tekrar dene.`;
+
+  if (!rawBody.trim()) throw new Error(unavailableMessage);
+
+  try {
+    return JSON.parse(rawBody);
+  } catch {
+    throw new Error(unavailableMessage);
+  }
+}
+
+function unavailableMessage(job) {
+  if (job.platform === 'twitch' && job.result?.lastError === 'Twitch playback was blocked.') {
+    return 'Twitch oynatıcısı bu test ortamında oynatmayı engelledi. Bu sonuç kanalın çevrimdışı olduğu anlamına gelmez.';
+  }
+
+  return job.result?.completionMessage || 'Bu testte oynatma verisi elde edilemedi. Biraz sonra yeniden deneyebilirsin.';
+}
+
 function updateJob(job) {
   panel.dataset.state = job.result?.state || job.state;
   const [label, message] = statusCopy[job.result?.state] || statusCopy[job.state] || statusCopy.running;
@@ -82,7 +105,7 @@ function updateJob(job) {
       : state === 'unavailable'
         ? partial
           ? `Test ${observedSeconds} saniyede kesildi; sonuçlar kısmi.`
-          : (job.result?.completionMessage || 'Oynatma verisi alınamadı.')
+          : unavailableMessage(job)
         : `${observedSeconds} saniyelik gözlem tamamlandı.`;
     title.textContent = complete ? 'Test tamamlandı' : partial ? 'Kısmi test sonucu' : 'Test sonucu';
     resultTitle.textContent = complete
@@ -100,7 +123,7 @@ function updateJob(job) {
           ? `${job.channel} kanalı test başlamadan önce çevrimdışıydı.`
           : partial
             ? `${job.channel} için ${observedSeconds} saniyelik kısmi gözlem yapıldı. ${job.result?.completionMessage || 'Elde edilen bulgular aşağıda.'} Ölçülemeyen değerler “Bilgi alınamadı” olarak bırakıldı.`
-            : (job.result?.completionMessage || 'Bu testte oynatma verisi elde edilemedi. Biraz sonra yeniden deneyebilirsin.');
+            : unavailableMessage(job);
     resultCard.dataset.state = state || 'unavailable';
     resultIcon.textContent = complete ? '✓' : state === 'offline' || partial ? '!' : '×';
     resultCard.hidden = false;
@@ -156,7 +179,7 @@ function updateJob(job) {
 async function pollJob(id) {
   while (true) {
     const response = await fetch(`/api/tests/${id}`, { cache: 'no-store' });
-    const job = await response.json();
+    const job = await readJsonResponse(response);
     if (!response.ok) throw new Error(job.error || 'Test durumu alınamadı.');
     updateJob(job);
     if (job.state === 'complete') return;
@@ -187,7 +210,7 @@ form.addEventListener('submit', async (event) => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ url: input.value }),
     });
-    const result = await response.json();
+    const result = await readJsonResponse(response);
     if (!response.ok) throw new Error(result.error || 'Test başlatılamadı.');
     await pollJob(result.id);
   } catch (error) {
