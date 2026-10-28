@@ -122,6 +122,43 @@ test('includes both the public and internal page hosts in Twitch embed parents',
   }
 });
 
+test('uses Render public HTTPS origin for server-side stream probes', async () => {
+  const previousExternalUrl = process.env.RENDER_EXTERNAL_URL;
+  const previousExternalHostname = process.env.RENDER_EXTERNAL_HOSTNAME;
+  const previousPublicHostname = process.env.PUBLIC_HOSTNAME;
+  process.env.RENDER_EXTERNAL_URL = 'https://is-stream-okay.onrender.com';
+  process.env.RENDER_EXTERNAL_HOSTNAME = 'is-stream-okay.onrender.com';
+  delete process.env.PUBLIC_HOSTNAME;
+  let probeInput;
+  try {
+    await withServer({
+      runProbe: async (input) => {
+        probeInput = input;
+        return { state: 'online', observedSeconds: 30 };
+      },
+    }, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/api/tests`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ url: 'twitch.tv/monstercat' }),
+      });
+
+      assert.equal(response.status, 202);
+      await new Promise(setImmediate);
+    });
+  } finally {
+    if (previousExternalUrl === undefined) delete process.env.RENDER_EXTERNAL_URL;
+    else process.env.RENDER_EXTERNAL_URL = previousExternalUrl;
+    if (previousExternalHostname === undefined) delete process.env.RENDER_EXTERNAL_HOSTNAME;
+    else process.env.RENDER_EXTERNAL_HOSTNAME = previousExternalHostname;
+    if (previousPublicHostname === undefined) delete process.env.PUBLIC_HOSTNAME;
+    else process.env.PUBLIC_HOSTNAME = previousPublicHostname;
+  }
+
+  assert.equal(probeInput.baseUrl, 'https://is-stream-okay.onrender.com');
+  assert.equal(probeInput.parent, 'is-stream-okay.onrender.com');
+});
+
 async function withServer(options, run) {
   const app = createApp(options);
   app.listen(0, '127.0.0.1');
