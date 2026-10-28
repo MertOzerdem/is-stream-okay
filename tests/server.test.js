@@ -273,6 +273,7 @@ test('limits concurrent server-side browser checks to one active test', async ()
     await new Promise((resolve) => setImmediate(resolve));
     const limited = await start();
     assert.equal(limited.status, 429);
+    assert.equal((await limited.json()).error, 'Şu anda bir test sürüyor. Biraz sonra tekrar dene.');
     releases.forEach((release) => release());
     await new Promise((resolve) => setImmediate(resolve));
   });
