@@ -391,9 +391,9 @@ function createApp({ runProbe = runPlatformProbe } = {}) {
       const id = crypto.randomUUID();
       const job = { id, ...stream, state: 'queued', elapsedSeconds: 0, createdAt: new Date().toISOString() };
       jobs.set(id, job);
-      const publicHostname = process.env.PUBLIC_HOSTNAME || new URL(`http://${req.headers.host || 'localhost'}`).hostname;
+      const publicHostname = process.env.PUBLIC_HOSTNAME || process.env.RENDER_EXTERNAL_HOSTNAME || new URL(`http://${req.headers.host || 'localhost'}`).hostname;
       const boundPort = server.address()?.port || process.env.PORT || 3000;
-      const baseUrl = process.env.INTERNAL_BASE_URL || `http://127.0.0.1:${boundPort}`;
+      const baseUrl = process.env.INTERNAL_BASE_URL || process.env.RENDER_EXTERNAL_URL || `http://127.0.0.1:${boundPort}`;
 
       Promise.resolve().then(() => runProbe({
         ...stream,
