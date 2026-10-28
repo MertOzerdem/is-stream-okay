@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Twitch veya Kick yayın bağlantısını ayrı bir test ortamında 30 saniye kontrol et.">
+    <title>Is Stream Okay? — Yayın testi</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="Is Stream Okay ana sayfa">
+          <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+          <span>isstreamokay<span class="brand-dot">.</span></span>
+        </a>
+        <span class="privacy"><span class="privacy-dot"></span> Üyeliksiz dış test</span>
+      </header>
+
+      <section class="hero" aria-labelledby="hero-title">
+        <p class="eyebrow"><span class="eyebrow-line"></span> Yayın için hızlı sağlık kontrolü</p>
+        <h1 id="hero-title">Sorun yayında mı?<br><span>Hemen kontrol et.</span></h1>
+        <p class="intro">Twitch veya Kick yayın linkini yapıştır. Yayını kendi test ortamımızda 30 saniye gözlemleyip sonucu gösterelim.</p>
+
+        <form id="test-form" class="url-form">
+          <label class="sr-only" for="stream-url">Twitch veya Kick yayın linki</label>
+          <span class="link-icon" aria-hidden="true">↗</span>
+          <input id="stream-url" name="url" type="url" inputmode="url" autocomplete="url" placeholder="Twitch veya Kick yayın linkini yapıştır" required>
+          <button id="submit-button" type="submit"><span>Yayını test et</span><span aria-hidden="true">→</span></button>
+        </form>
+        <p id="form-error" class="form-error" role="alert" hidden></p>
+        <p class="helper">Örnek: twitch.tv/kanalismi <span>·</span> Test yaklaşık 30 saniye sürer</p>
+      </section>
+
+      <section id="test-panel" class="test-panel" aria-live="polite" hidden>
+        <div class="panel-heading">
+          <div><p class="eyebrow"><span class="eyebrow-line"></span> Bağımsız test</p><h2 id="panel-title">Test hazırlanıyor</h2></div>
+          <span id="status-pill" class="status-pill"><span class="status-dot"></span><span id="status-label">Kuyrukta</span></span>
+        </div>
+        <div class="progress-track"><div id="progress-bar" class="progress-bar"></div></div>
+        <div class="progress-copy"><span id="progress-message">Test ortamı hazırlanıyor…</span><span id="elapsed-time">0 / 30 sn</span></div>
+        <div id="result-card" class="result-card" hidden>
+          <span class="result-icon" aria-hidden="true">✓</span>
+          <div><h3 id="result-title">Test tamamlandı</h3><p id="result-message"></p></div>
+        </div>
+        <section id="resolution-card" class="resolution-card" aria-label="Çözünürlük ve kare hızı" hidden>
+          <h3>Görüntü bilgisi</h3>
+          <div class="resolution-grid">
+            <div><span>Mevcut çözünürlük</span><strong id="current-resolution">Bilgi alınamadı</strong></div>
+            <div><span>Kare hızı</span><strong id="current-fps">Bilgi alınamadı</strong></div>
+            <div class="quality-row"><span>Kullanılabilir seçenekler</span><strong id="available-qualities">Bilgi alınamadı</strong></div>
+          </div>
+        </section>
+        <section id="codec-card" class="codec-card" aria-label="Görüntü ve ses codec bilgisi" hidden>
+          <h3>Kodlama bilgisi</h3>
+          <p id="codec-summary" class="codec-summary" hidden></p>
+          <div class="codec-grid">
+            <div><span>Görüntü codeci</span><strong id="video-codec">Bilgi alınamadı</strong><code id="video-codec-id"></code></div>
+            <div><span>Ses codeci</span><strong id="audio-codec">Bilgi alınamadı</strong><code id="audio-codec-id"></code></div>
+          </div>
+          <p class="codec-note"><span>Ses kalite beklentisi</span><strong id="codec-quality-note">Bilgi alınamadı</strong></p>
+        </section>
+        <section id="stall-card" class="stall-card" aria-label="Oynatma takılmaları" hidden>
+          <h3>Oynatma kararlılığı</h3>
+          <p id="stall-summary" class="stall-summary" hidden></p>
+          <div class="stall-grid">
+            <div><span>Takılma sayısı</span><strong id="stall-count">Bilgi alınamadı</strong></div>
+            <div><span>Toplam takılma süresi</span><strong id="stall-duration">Bilgi alınamadı</strong></div>
+            <div><span>Gözlem süresi</span><strong id="stall-observation">Bilgi alınamadı</strong></div>
+            <div><span>Hata payı</span><strong id="stall-error-margin">Doğrulanmadı</strong></div>
+          </div>
+        </section>
+        <section id="audio-card" class="audio-card" aria-label="Dijital ses seviyesi" hidden>
+          <h3>Ses seviyesi</h3>
+          <p id="audio-summary" class="audio-summary" hidden></p>
+          <div class="audio-grid">
+            <div><span>Dijital ortalama seviye</span><strong id="audio-level">Bilgi alınamadı</strong></div>
+            <div><span>Sinyal durumu</span><strong id="audio-status">Ölçüm alınamadı</strong></div>
+            <div><span>Gözlem süresi</span><strong id="audio-observation">Bilgi alınamadı</strong></div>
+            <div><span>Örnek kapsama</span><strong id="audio-coverage">Bilgi alınamadı</strong></div>
+          </div>
+          <p class="audio-thresholds">Eşikler: sinyal algılanmadı &lt; −60 dBFS · çok düşük ≥ −60 ve &lt; −35 dBFS · sinyal var ≥ −35 dBFS.</p>
+          <p class="audio-caveat">dBFS dijital sinyal seviyesidir; fiziksel ortamındaki veya cihazındaki duyulabilirliği ölçmez.</p>
+        </section>
+      </section>
+
+      <section class="how-it-works" aria-label="Test nasıl çalışır">
+        <article class="step-card"><span class="step-number">01</span><span class="step-icon" aria-hidden="true">↳</span><h3>Linki bırak</h3><p>Twitch kanal adresini ekle. Üyelik gerekmez.</p></article>
+        <article class="step-card"><span class="step-number">02</span><span class="step-icon pulse-icon" aria-hidden="true">◉</span><h3>Biz test edelim</h3><p>Ayrı test ortamımız yayını 30 saniye gözlemler.</p></article>
+        <article class="step-card"><span class="step-number">03</span><span class="step-icon" aria-hidden="true">▤</span><h3>Sonucu gör</h3><p>Yayına ait bulguları anlaşılır biçimde paylaşırız.</p></article>
+      </section>
+
+      <footer><span>Bağımsız test sonucu, yalnızca gözlem süresindeki yayını anlatır.</span><span>isstreamokay <span class="brand-dot">●</span></span></footer>
+    </main>
+    <script src="/app.js" defer></script>
+  </body>
+</html>
+
