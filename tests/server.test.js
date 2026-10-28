@@ -1,8 +1,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { once } = require('node:events');
+const http = require('node:http');
 const { chromium } = require('playwright');
-const { createApp, describeCodecs, parseHlsManifest } = require('../src/server');
+const { createApp, describeCodecs, parseHlsManifest, runTwitchProbe } = require('../src/server');
 const { observeVideoPlayback, summarizeStalls, STALL_ERROR_MARGIN_MS } = require('../src/stall-measurement');
 
 test('measures controlled waiting intervals within the stated margin', async () => {
@@ -91,6 +92,34 @@ https://example.test/variant.m3u8`);
 
 test('does not invent codec details or quality expectations when metadata is missing', () => {
   assert.deepEqual(describeCodecs(undefined), { video: null, audio: null, qualityExpectation: null });
+});
+
+test('includes both the public and internal page hosts in Twitch embed parents', async () => {
+  let probeUrl;
+  const server = http.createServer((req, res) => {
+    probeUrl = new URL(req.url, `http://${req.headers.host}`);
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+    res.end('<script>window.__streamProbe = { snapshot: { offline: true } };</script>');
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  try {
+    const result = await runTwitchProbe({
+      channel: 'sample-channel',
+      baseUrl: `http://127.0.0.1:${server.address().port}`,
+      parent: 'is-stream-okay.onrender.com',
+      onProgress: () => {},
+    });
+
+    assert.equal(result.state, 'offline');
+    assert.deepEqual(probeUrl.searchParams.getAll('parent'), [
+      'is-stream-okay.onrender.com',
+      '127.0.0.1',
+    ]);
+  } finally {
+    server.closeAllConnections?.();
+    server.close();
+  }
 });
 
 async function withServer(options, run) {
