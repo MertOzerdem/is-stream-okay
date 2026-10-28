@@ -12,9 +12,19 @@ const STATIC_ASSETS = new Map([
   ['/app.js', { file: 'app.js', contentType: 'text/javascript; charset=utf-8' }],
 ]);
 const TEST_DURATION_MS = 30_000;
-const MAX_ACTIVE_TESTS = 2;
+const MAX_ACTIVE_TESTS = 1;
 const RESULT_TTL_MS = 10 * 60_000;
 const jobs = new Map();
+const CHROMIUM_ARGS = [
+  '--autoplay-policy=no-user-gesture-required',
+  '--mute-audio',
+  '--disable-gpu',
+  '--disable-dev-shm-usage',
+];
+
+function launchProbeBrowser() {
+  return chromium.launch({ headless: true, args: CHROMIUM_ARGS });
+}
 
 function parseHlsManifest(manifest) {
   const qualities = [];
@@ -167,11 +177,8 @@ function createProbeResult({ platform, state, startedAt, durationMs, resolution,
 }
 
 async function runTwitchProbe({ channel, baseUrl, parent, onProgress, durationMs = TEST_DURATION_MS }) {
-  const browser = await chromium.launch({
-    headless: true,
-    args: ['--autoplay-policy=no-user-gesture-required', '--mute-audio'],
-  });
-  const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+  const browser = await launchProbeBrowser();
+  const page = await browser.newPage({ viewport: { width: 800, height: 600 } });
   let startedAt = null;
   let startupDeadline = Date.now() + 45_000;
   let state = 'starting';
@@ -266,11 +273,8 @@ async function runTwitchProbe({ channel, baseUrl, parent, onProgress, durationMs
 }
 
 async function runKickProbe({ channel, baseUrl, onProgress, durationMs = TEST_DURATION_MS }) {
-  const browser = await chromium.launch({
-    headless: true,
-    args: ['--autoplay-policy=no-user-gesture-required', '--mute-audio'],
-  });
-  const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+  const browser = await launchProbeBrowser();
+  const page = await browser.newPage({ viewport: { width: 800, height: 600 } });
   let startedAt = null;
   let startupDeadline = Date.now() + 45_000;
   let state = 'starting';
