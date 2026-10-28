@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="Twitch veya Kick yayın bağlantısını ayrı bir test ortamında 30 saniye kontrol et.">
+    <meta name="description" content="Twitch veya Kick yayın bağlantısını ayrı bir test ortamında 30 saniye veya 1 dakika kontrol et.">
     <title>Is Stream Okay? — Yayın testi</title>
     <link rel="stylesheet" href="/styles.css">
   </head>
@@ -20,16 +20,23 @@
       <section class="hero" aria-labelledby="hero-title">
         <p class="eyebrow"><span class="eyebrow-line"></span> Yayın için hızlı sağlık kontrolü</p>
         <h1 id="hero-title">Sorun yayında mı?<br><span>Hemen kontrol et.</span></h1>
-        <p class="intro">Twitch veya Kick yayın linkini yapıştır. Yayını kendi test ortamımızda 30 saniye gözlemleyip sonucu gösterelim.</p>
+        <p class="intro">Twitch veya Kick yayın linkini yapıştır. Test süresini seç, yayını kendi test ortamımızda gözlemleyip sonucu gösterelim.</p>
 
-        <form id="test-form" class="url-form">
-          <label class="sr-only" for="stream-url">Twitch veya Kick yayın linki</label>
-          <span class="link-icon" aria-hidden="true">↗</span>
-          <input id="stream-url" name="url" type="text" inputmode="url" autocomplete="url" placeholder="Twitch veya Kick yayın linkini yapıştır" required>
-          <button id="submit-button" type="submit"><span>Yayını test et</span><span aria-hidden="true">→</span></button>
+        <form id="test-form" class="test-form">
+          <div class="url-form">
+            <label class="sr-only" for="stream-url">Twitch veya Kick yayın linki</label>
+            <span class="link-icon" aria-hidden="true">↗</span>
+            <input id="stream-url" name="url" type="text" inputmode="url" autocomplete="url" placeholder="Twitch veya Kick yayın linkini yapıştır" required>
+            <button id="submit-button" type="submit"><span>Yayını test et</span><span aria-hidden="true">→</span></button>
+          </div>
+          <fieldset class="duration-options">
+            <legend>Test süresi</legend>
+            <label><input type="radio" name="durationSeconds" value="30" checked><span>30 saniye</span></label>
+            <label><input type="radio" name="durationSeconds" value="60"><span>1 dakika</span></label>
+          </fieldset>
         </form>
         <p id="form-error" class="form-error" role="alert" hidden></p>
-        <p class="helper">Örnek: twitch.tv/kanalismi <span>·</span> Test yaklaşık 30 saniye sürer</p>
+        <p class="helper">Örnek: twitch.tv/kanalismi <span>·</span> Test yaklaşık seçtiğin süre kadar sürer</p>
       </section>
 
       <section id="test-panel" class="test-panel" aria-live="polite" hidden>
@@ -48,7 +55,7 @@
           <div class="resolution-grid">
             <div><span>Mevcut çözünürlük</span><strong id="current-resolution">Bilgi alınamadı</strong></div>
             <div><span>Kare hızı</span><strong id="current-fps">Bilgi alınamadı</strong></div>
-            <div class="quality-row"><span>Kullanılabilir seçenekler</span><strong id="available-qualities">Bilgi alınamadı</strong></div>
+            <div class="quality-row"><span>Kullanılabilir seçenekler</span><strong id="available-qualities">Bilgi alınamadı</strong><small id="quality-selection"></small></div>
           </div>
         </section>
         <section id="codec-card" class="codec-card" aria-label="Görüntü ve ses codec bilgisi" hidden>
@@ -76,7 +83,8 @@
           <div class="audio-grid">
             <div><span>Dijital ortalama seviye</span><strong id="audio-level">Bilgi alınamadı</strong></div>
             <div><span>Sinyal durumu</span><strong id="audio-status">Ölçüm alınamadı</strong></div>
-            <div><span>Gözlem süresi</span><strong id="audio-observation">Bilgi alınamadı</strong></div>
+            <div><span>Toplam gözlem süresi</span><strong id="audio-observation">Bilgi alınamadı</strong></div>
+            <div><span>Örneklenen ses</span><strong id="audio-sampled">Bilgi alınamadı</strong></div>
             <div><span>Örnek kapsama</span><strong id="audio-coverage">Bilgi alınamadı</strong></div>
           </div>
           <p class="audio-thresholds">Eşikler: sinyal algılanmadı &lt; −60 dBFS · çok düşük ≥ −60 ve &lt; −35 dBFS · sinyal var ≥ −35 dBFS.</p>
@@ -86,7 +94,7 @@
 
       <section class="how-it-works" aria-label="Test nasıl çalışır">
         <article class="step-card"><span class="step-number">01</span><span class="step-icon" aria-hidden="true">↳</span><h3>Linki bırak</h3><p>Twitch kanal adresini ekle. Üyelik gerekmez.</p></article>
-        <article class="step-card"><span class="step-number">02</span><span class="step-icon pulse-icon" aria-hidden="true">◉</span><h3>Biz test edelim</h3><p>Ayrı test ortamımız yayını 30 saniye gözlemler.</p></article>
+        <article class="step-card"><span class="step-number">02</span><span class="step-icon pulse-icon" aria-hidden="true">◉</span><h3>Biz test edelim</h3><p>Ayrı test ortamımız yayını seçtiğin süre boyunca gözlemler.</p></article>
         <article class="step-card"><span class="step-number">03</span><span class="step-icon" aria-hidden="true">▤</span><h3>Sonucu gör</h3><p>Yayına ait bulguları anlaşılır biçimde paylaşırız.</p></article>
       </section>
 
@@ -95,4 +103,3 @@
     <script src="/app.js" defer></script>
   </body>
 </html>
-

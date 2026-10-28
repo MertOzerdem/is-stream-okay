@@ -99,6 +99,26 @@ test('classifies the aggregate level across the entire observation window', () =
   assert.equal(result.thresholds.noSignalDbfs, AUDIO_NO_SIGNAL_THRESHOLD_DBFS);
   assert.equal(result.thresholds.lowSignalDbfs, AUDIO_LOW_SIGNAL_THRESHOLD_DBFS);
   assert.equal(result.measurementFloorDbfs, AUDIO_MEASUREMENT_FLOOR_DBFS);
+  assert.equal(result.coverageStatus, 'full');
+  assert.equal(result.sampledMilliseconds, 5000);
+});
+
+test('reports a clearly marked partial level when enough real samples exist', () => {
+  const result = summarizeAudioSignal({
+    state: 'waiting',
+    sumSquaredRms: 0.01 * 10,
+    sampleWeight: 10,
+    sampleWindows: 120,
+    sampledMilliseconds: 12_300,
+    observationMilliseconds: 35_000,
+    coveragePercent: 35.1,
+  });
+
+  assert.equal(result.status, 'signal');
+  assert.equal(result.coverageStatus, 'partial');
+  assert.equal(result.sampledMilliseconds, 12_300);
+  assert.equal(result.observationMilliseconds, 35_000);
+  assert.equal(result.coveragePercent, 35.1);
 });
 
 test('reports audio measurement as unavailable when coverage or player access is invalid', () => {
@@ -131,4 +151,3 @@ test('does not call zero Web Audio samples silence when a cross-origin decoded s
   assert.equal(summarizeAudioSignal({ ...snapshot, decodedAudioByteCount: 0 }).status, 'no-signal');
   assert.equal(summarizeAudioSignal({ ...snapshot, mediaSourceType: 'MediaSourceHandle' }).status, 'no-signal');
 });
-

@@ -16,4 +16,3 @@
 **Verification:** Browser tests cover empty and malformed POST responses, an empty polling `502` response, a blocked Twitch probe result, and rejection of a concurrent second test. The polling fixture releases its simulated worker after the assertion so it does not occupy the shared test-job registry. The full suite passes.
 
 **Resolution:** A shared Chromium launch profile disables GPU and `/dev/shm` usage, the viewport was reduced, and the service now admits one active probe at a time to lower peak memory on the 512 MB instance.
-

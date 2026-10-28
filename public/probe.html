@@ -8,7 +8,7 @@
         const parameters = new URLSearchParams(location.search);
         const channel = parameters.get('channel');
         const parents = [...new Set(parameters.getAll('parent').filter(Boolean))];
-        const probe = { embedReady: false, playerReady: false, online: false, offline: false, playing: false, stats: null, qualities: [], error: null };
+        const probe = { embedReady: false, playerReady: false, online: false, offline: false, playing: false, stats: null, qualities: [], qualitySelection: null, error: null };
         window.__streamProbe = { snapshot: probe };
         const script = document.createElement('script');
         script.src = 'https://embed.twitch.tv/embed/v1.js';
@@ -44,6 +44,24 @@
               probe.qualities = player.getQualities()
                 .map((quality) => typeof quality === 'string' ? quality : quality?.name)
                 .filter((quality) => quality && quality.toLowerCase() !== 'auto');
+              const qualitySelection = probe.qualitySelection;
+              const preferredQuality = probe.qualities.find((quality) => /^1080(?:p\d*)?(?:\s|$)/i.test(quality.trim()))
+                || probe.qualities.find((quality) => quality.toLowerCase() === 'chunked' || /\bsource\b/i.test(quality));
+              if (preferredQuality && !qualitySelection) {
+                probe.qualitySelection = { requested: preferredQuality, selected: null, status: 'requested' };
+                try {
+                  player.setQuality(preferredQuality);
+                } catch (error) {
+                  probe.qualitySelection.status = 'failed';
+                  probe.qualitySelection.error = error.message;
+                }
+              }
+              if (probe.qualitySelection && probe.qualitySelection.status !== 'failed') {
+                probe.qualitySelection.selected = player.getQuality();
+                probe.qualitySelection.status = probe.qualitySelection.selected === probe.qualitySelection.requested
+                  ? 'selected'
+                  : 'pending';
+              }
               if (player.getEnded()) {
                 probe.offline = true;
                 probe.online = false;
@@ -58,4 +76,3 @@
     </script>
   </body>
 </html>
-

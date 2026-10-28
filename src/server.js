@@ -11,7 +11,8 @@ const STATIC_ASSETS = new Map([
   ['/styles.css', { file: 'styles.css', contentType: 'text/css; charset=utf-8' }],
   ['/app.js', { file: 'app.js', contentType: 'text/javascript; charset=utf-8' }],
 ]);
-const TEST_DURATION_MS = 30_000;
+const DEFAULT_TEST_DURATION_SECONDS = 30;
+const ALLOWED_TEST_DURATION_SECONDS = new Set([30, 60]);
 const MAX_ACTIVE_TESTS = 1;
 const RESULT_TTL_MS = 10 * 60_000;
 const jobs = new Map();
@@ -176,7 +177,7 @@ function createProbeResult({ platform, state, startedAt, durationMs, resolution,
   return result;
 }
 
-async function runTwitchProbe({ channel, baseUrl, parent, onProgress, durationMs = TEST_DURATION_MS }) {
+async function runTwitchProbe({ channel, baseUrl, parent, onProgress, durationMs = DEFAULT_TEST_DURATION_SECONDS * 1000 }) {
   const browser = await launchProbeBrowser();
   const page = await browser.newPage({ viewport: { width: 800, height: 600 } });
   let startedAt = null;
@@ -185,6 +186,7 @@ async function runTwitchProbe({ channel, baseUrl, parent, onProgress, durationMs
   let lastError = null;
   let lastMediaSnapshot = null;
   let lastAudioSnapshot = null;
+  let lastQualitySelection = null;
   const samples = [];
   const availableQualities = new Set();
 
@@ -200,6 +202,9 @@ async function runTwitchProbe({ channel, baseUrl, parent, onProgress, durationMs
         current: lastStats?.videoResolution || null,
         fps: Number.isFinite(lastStats?.fps) ? lastStats.fps : null,
         available: [...availableQualities],
+        requestedQuality: lastQualitySelection?.requested || null,
+        selectedQuality: lastQualitySelection?.selected || null,
+        qualitySelectionStatus: lastQualitySelection?.status || null,
       },
       codecs: describeCodecs(lastStats?.codecs),
       stalls: lastMediaSnapshot
@@ -230,6 +235,7 @@ async function runTwitchProbe({ channel, baseUrl, parent, onProgress, durationMs
         lastAudioSnapshot = await playerFrame.evaluate(observeAudioSignal).catch(() => lastAudioSnapshot);
       }
       if (snapshot) {
+        if (snapshot.qualitySelection) lastQualitySelection = snapshot.qualitySelection;
         if (snapshot.offline) {
           state = 'offline';
           break;
@@ -272,7 +278,7 @@ async function runTwitchProbe({ channel, baseUrl, parent, onProgress, durationMs
   }
 }
 
-async function runKickProbe({ channel, baseUrl, onProgress, durationMs = TEST_DURATION_MS }) {
+async function runKickProbe({ channel, baseUrl, onProgress, durationMs = DEFAULT_TEST_DURATION_SECONDS * 1000 }) {
   const browser = await launchProbeBrowser();
   const page = await browser.newPage({ viewport: { width: 800, height: 600 } });
   let startedAt = null;
@@ -388,12 +394,25 @@ function createApp({ runProbe = runPlatformProbe } = {}) {
       }
       const stream = parseStreamUrl(body.url);
       if (!stream) return sendJson(res, 400, { error: 'Geçerli bir Twitch veya Kick kanal linki gir.' });
+      const durationSeconds = body.durationSeconds === undefined
+        ? DEFAULT_TEST_DURATION_SECONDS
+        : body.durationSeconds;
+      if (!ALLOWED_TEST_DURATION_SECONDS.has(durationSeconds)) {
+        return sendJson(res, 400, { error: 'Test süresi 30 veya 60 saniye olmalı.' });
+      }
 
       const activeCount = [...jobs.values()].filter((job) => job.state !== 'complete').length;
       if (activeCount >= MAX_ACTIVE_TESTS) return sendJson(res, 429, { error: 'Şu anda bir test sürüyor. Biraz sonra tekrar dene.' });
 
       const id = crypto.randomUUID();
-      const job = { id, ...stream, state: 'queued', elapsedSeconds: 0, createdAt: new Date().toISOString() };
+      const job = {
+        id,
+        ...stream,
+        durationSeconds,
+        state: 'queued',
+        elapsedSeconds: 0,
+        createdAt: new Date().toISOString(),
+      };
       jobs.set(id, job);
       const publicHostname = process.env.PUBLIC_HOSTNAME || process.env.RENDER_EXTERNAL_HOSTNAME || new URL(`http://${req.headers.host || 'localhost'}`).hostname;
       const boundPort = server.address()?.port || process.env.PORT || 3000;
@@ -401,6 +420,7 @@ function createApp({ runProbe = runPlatformProbe } = {}) {
 
       Promise.resolve().then(() => runProbe({
         ...stream,
+        durationMs: durationSeconds * 1000,
         baseUrl,
         parent: publicHostname,
         onProgress: (progress) => Object.assign(job, progress, { state: progress.state || 'running' }),
@@ -417,7 +437,7 @@ function createApp({ runProbe = runPlatformProbe } = {}) {
         const partialSeconds = Number.isFinite(partialResult.observedSeconds)
           ? partialResult.observedSeconds
           : job.elapsedSeconds || 0;
-        const observedSeconds = Math.min(TEST_DURATION_MS / 1000, Math.max(0, Math.round(partialSeconds)));
+        const observedSeconds = Math.min(job.durationSeconds, Math.max(0, Math.round(partialSeconds)));
         job.state = 'complete';
         job.result = {
           ...partialResult,
@@ -444,6 +464,7 @@ function createApp({ runProbe = runPlatformProbe } = {}) {
         id: job.id,
         platform: job.platform,
         channel: job.channel,
+        durationSeconds: job.durationSeconds,
         state: job.state,
         elapsedSeconds: job.elapsedSeconds,
         createdAt: job.createdAt,
@@ -498,4 +519,3 @@ if (require.main === module) {
 }
 
 module.exports = { createApp, describeCodecs, parseHlsManifest, parseHlsQualities, parseStreamUrl, runKickProbe, runTwitchProbe };
-

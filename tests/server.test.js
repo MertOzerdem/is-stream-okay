@@ -218,6 +218,76 @@ test('accepts a Twitch channel and returns a pollable test result', async () => 
   });
 });
 
+test('accepts a one-minute test duration and exposes it to the worker and poll response', async () => {
+  let workerDuration;
+  await withServer({
+    runProbe: async ({ durationMs }) => {
+      workerDuration = durationMs;
+      return { state: 'online', observedSeconds: 60 };
+    },
+  }, async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/tests`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ url: 'twitch.tv/monstercat', durationSeconds: 60 }),
+    });
+
+    assert.equal(response.status, 202);
+    const { id } = await response.json();
+    let job;
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      job = await (await fetch(`${baseUrl}/api/tests/${id}`)).json();
+      if (job.state === 'complete') break;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+
+    assert.equal(workerDuration, 60_000);
+    assert.equal(job.durationSeconds, 60);
+    assert.equal(job.result.observedSeconds, 60);
+  });
+});
+
+test('rejects unsupported test durations', async () => {
+  await withServer({}, async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/tests`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ url: 'twitch.tv/monstercat', durationSeconds: 45 }),
+    });
+
+    assert.equal(response.status, 400);
+    assert.match((await response.json()).error, /30|60/);
+  });
+});
+
+test('lets the visitor choose a one-minute test and reports progress against that duration', async () => {
+  let workerDuration;
+  await withServer({
+    runProbe: async (input) => {
+      workerDuration = input.durationMs;
+      input.onProgress({ state: 'running', elapsedSeconds: 42 });
+      return { state: 'online', observedSeconds: 60 };
+    },
+  }, async (baseUrl) => {
+    const browser = await chromium.launch({ headless: true });
+    const page = await browser.newPage();
+    try {
+      await page.goto(baseUrl);
+      assert.equal(await page.locator('input[name="durationSeconds"][value="30"]').isChecked(), true);
+      await page.locator('.duration-options label').filter({ hasText: '1 dakika' }).click();
+      await page.locator('#stream-url').fill('https://twitch.tv/monstercat');
+      await page.locator('#submit-button').click();
+      await page.locator('#result-card').waitFor({ timeout: 5000 });
+
+      assert.equal(workerDuration, 60_000);
+      assert.equal(await page.locator('#elapsed-time').innerText(), '60 / 60 sn');
+      assert.match(await page.locator('#result-message').innerText(), /60 saniye/);
+    } finally {
+      await browser.close();
+    }
+  });
+});
+
 test('accepts the scheme-less Twitch link shown in the page example', async () => {
   await withServer({ runProbe: async () => ({ state: 'online', observedSeconds: 30 }) }, async (baseUrl) => {
     const response = await fetch(`${baseUrl}/api/tests`, {
@@ -293,6 +363,48 @@ test('serves the no-login test page', async () => {
     assert.equal(script.status, 200);
     assert.match(script.headers.get('content-type'), /javascript/);
   });
+});
+
+test('selects 1080p on Twitch and falls back to the original source quality', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    await withServer({}, async (baseUrl) => {
+      for (const example of [
+        { qualities: ['720p60', '1080p60'], expected: '1080p60' },
+        { qualities: ['720p60', '1920x1080', 'chunked'], expected: 'chunked' },
+      ]) {
+        const page = await browser.newPage();
+        const fakePlayerScript = `
+          let selected = '720p60';
+          const player = {
+            getQualities: () => ${JSON.stringify(example.qualities)},
+            getQuality: () => selected,
+            setQuality: (quality) => { selected = quality; window.__selectedQuality = quality; },
+            getPlaybackStats: () => ({ videoResolution: '1280x720', fps: 30, codecs: 'avc1.4D401F,mp4a.40.2' }),
+            getEnded: () => false,
+          };
+          class Embed {
+            constructor() { this.player = player; }
+            getPlayer() { return this.player; }
+            addEventListener(event, callback) { if (event === 'VIDEO_READY') callback(); }
+          }
+          Embed.VIDEO_READY = 'VIDEO_READY';
+          window.Twitch = { Embed, Player: { ONLINE: 'ONLINE', OFFLINE: 'OFFLINE', PLAYBACK_BLOCKED: 'PLAYBACK_BLOCKED' } };
+        `;
+        await page.route('https://embed.twitch.tv/embed/v1.js', (route) => route.fulfill({
+          status: 200,
+          contentType: 'application/javascript',
+          body: fakePlayerScript,
+        }));
+        await page.goto(`${baseUrl}/probe?channel=test&parent=localhost`);
+        await page.waitForFunction((quality) => window.__streamProbe?.snapshot?.qualitySelection?.requested === quality, example.expected);
+        assert.equal(await page.evaluate(() => window.__selectedQuality), example.expected);
+        await page.close();
+      }
+    });
+  } finally {
+    await browser.close();
+  }
 });
 
 test('shows a readable message when the test API returns an empty error response', async () => {
@@ -532,7 +644,9 @@ test('shows measured audio level, full observation coverage, and signal classifi
         levelDbfs: -28.5,
         measurementFloorDbfs: -90,
         observationMilliseconds: 29_950,
+        sampledMilliseconds: 29_800,
         coveragePercent: 99.5,
+        coverageStatus: 'full',
         sampleWindows: 600,
       },
     }),
@@ -549,9 +663,48 @@ test('shows measured audio level, full observation coverage, and signal classifi
       assert.match(card, /-28,5 dBFS/);
       assert.match(card, /Sinyal var/);
       assert.match(card, /30,0 sn/);
+      assert.match(card, /29,8 sn/);
       assert.match(card, /%99,5/);
       assert.match(card, /çok düşük ≥ −60 ve < −35 dBFS/);
       assert.match(card, /fiziksel ortamındaki veya cihazındaki duyulabilirliği ölçmez/);
+    } finally {
+      await browser.close();
+    }
+  });
+});
+
+test('shows the measured level from partial audio samples with an explicit limitation', async () => {
+  await withServer({
+    runProbe: async ({ platform }) => ({
+      platform,
+      state: 'online',
+      observedSeconds: 30,
+      audio: {
+        status: 'signal',
+        levelDbfs: -28.5,
+        measurementFloorDbfs: -90,
+        observationMilliseconds: 35_000,
+        sampledMilliseconds: 12_300,
+        coveragePercent: 35.1,
+        coverageStatus: 'partial',
+        sampleWindows: 120,
+      },
+    }),
+  }, async (baseUrl) => {
+    const browser = await chromium.launch({ headless: true });
+    const page = await browser.newPage();
+    try {
+      await page.goto(baseUrl);
+      await page.locator('#stream-url').fill('https://kick.com/DeenTheGreat');
+      await page.locator('#submit-button').click();
+      await page.locator('#audio-card:not([hidden])').waitFor({ timeout: 5000 });
+
+      const card = await page.locator('#audio-card').innerText();
+      assert.match(card, /-28,5 dBFS/);
+      assert.match(card, /12,3 sn/);
+      assert.match(card, /%35,1/);
+      assert.match(card, /Kısmi ölçüm/);
+      assert.match(card, /yalnızca örneklenen süreyi kapsar/);
     } finally {
       await browser.close();
     }
@@ -684,4 +837,3 @@ test('identifies a stream that goes offline after partial observation', async ()
     }
   });
 });
-

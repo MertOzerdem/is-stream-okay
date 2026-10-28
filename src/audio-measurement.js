@@ -3,6 +3,7 @@ const AUDIO_LOW_SIGNAL_THRESHOLD_DBFS = -35;
 const AUDIO_MEASUREMENT_FLOOR_DBFS = -90;
 const AUDIO_MIN_SAMPLE_WINDOWS = 10;
 const AUDIO_MIN_COVERAGE_PERCENT = 90;
+const AUDIO_MIN_PARTIAL_SAMPLE_MILLISECONDS = 5_000;
 
 // Playwright serializes this standalone function into the platform player's frame.
 async function observeAudioSignal() {
@@ -116,7 +117,6 @@ async function observeAudioSignal() {
       tracker.analyser = analyser;
       tracker.meter = meter;
       tracker.samplingMode = samplingMode;
-      tracker.startedAt ??= performance.now();
       tracker.lastSampleAt = null;
       if (meter) {
         meter.port.onmessage = (event) => {
@@ -132,7 +132,7 @@ async function observeAudioSignal() {
           updateSourceEvidence();
         };
       }
-      context.resume().catch(() => {});
+      await context.resume().catch(() => {});
     } catch {
       tracker.setupError = 'audio-path-unavailable';
     }
@@ -153,7 +153,8 @@ async function observeAudioSignal() {
   if (tracker.context) {
     media.muted = false;
     media.volume = 1;
-    if (tracker.context.state === 'suspended') tracker.context.resume().catch(() => {});
+    if (tracker.context.state === 'suspended') await tracker.context.resume().catch(() => {});
+    if (tracker.context.state === 'running') tracker.startedAt ??= performance.now();
 
     if (tracker.samplingMode === 'analyser-fallback' && !tracker.timer) {
       tracker.timer = window.setInterval(() => {
@@ -206,6 +207,7 @@ async function observeAudioSignal() {
     frameOrigin: location.origin,
     samplingMode: tracker.samplingMode,
     observationMilliseconds: Math.round(observationMilliseconds),
+    sampledMilliseconds: Math.round(tracker.sampledMilliseconds),
     coveragePercent: Math.round(coveragePercent * 10) / 10,
   };
 }
@@ -217,7 +219,17 @@ function summarizeAudioSignal(snapshot) {
     && snapshot.decodedAudioByteCount > 0
     && !['MediaSource', 'MediaSourceHandle'].includes(snapshot.mediaSourceType)
     && snapshot.sourceOrigin !== snapshot.frameOrigin;
-  if (!snapshot || snapshot.state !== 'ready'
+  const observationMilliseconds = Number.isFinite(snapshot?.observationMilliseconds)
+    ? snapshot.observationMilliseconds
+    : 0;
+  const coveragePercent = Number.isFinite(snapshot?.coveragePercent) ? snapshot.coveragePercent : 0;
+  const sampledMilliseconds = Number.isFinite(snapshot?.sampledMilliseconds)
+    ? snapshot.sampledMilliseconds
+    : observationMilliseconds * coveragePercent / 100;
+  const coverageStatus = coveragePercent >= AUDIO_MIN_COVERAGE_PERCENT
+    ? 'full'
+    : sampledMilliseconds >= AUDIO_MIN_PARTIAL_SAMPLE_MILLISECONDS ? 'partial' : null;
+  if (!snapshot
     || !Number.isFinite(snapshot.sumSquaredRms)
     || !Number.isFinite(snapshot.sampleWindows)
     || !Number.isFinite(sampleWeight)
@@ -225,15 +237,17 @@ function summarizeAudioSignal(snapshot) {
     || snapshot.sampleWindows < AUDIO_MIN_SAMPLE_WINDOWS
     || !Number.isFinite(snapshot.observationMilliseconds)
     || !Number.isFinite(snapshot.coveragePercent)
-    || snapshot.coveragePercent < AUDIO_MIN_COVERAGE_PERCENT
+    || !coverageStatus
     || silentSourcePathIsAmbiguous) {
     return {
       status: 'unavailable',
       reason: snapshot?.reason || (silentSourcePathIsAmbiguous ? 'silent-source-path-ambiguous' : 'measurement-not-continuous'),
       levelDbfs: null,
       measurementFloorDbfs: AUDIO_MEASUREMENT_FLOOR_DBFS,
-      observationMilliseconds: Number.isFinite(snapshot?.observationMilliseconds) ? snapshot.observationMilliseconds : 0,
-      coveragePercent: Number.isFinite(snapshot?.coveragePercent) ? snapshot.coveragePercent : 0,
+      observationMilliseconds,
+      sampledMilliseconds,
+      coveragePercent,
+      samplingMode: snapshot?.samplingMode || null,
       sampleWindows: Number.isFinite(snapshot?.sampleWindows) ? snapshot.sampleWindows : 0,
       thresholds: {
         noSignalDbfs: AUDIO_NO_SIGNAL_THRESHOLD_DBFS,
@@ -256,8 +270,11 @@ function summarizeAudioSignal(snapshot) {
     status,
     levelDbfs,
     measurementFloorDbfs: AUDIO_MEASUREMENT_FLOOR_DBFS,
-    observationMilliseconds: snapshot.observationMilliseconds,
-    coveragePercent: snapshot.coveragePercent,
+    observationMilliseconds,
+    sampledMilliseconds,
+    coveragePercent,
+    coverageStatus,
+    samplingMode: snapshot.samplingMode || null,
     sampleWindows: snapshot.sampleWindows,
     thresholds: {
       noSignalDbfs: AUDIO_NO_SIGNAL_THRESHOLD_DBFS,
@@ -273,4 +290,3 @@ module.exports = {
   observeAudioSignal,
   summarizeAudioSignal,
 };
-

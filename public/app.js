@@ -16,6 +16,7 @@ const resolutionCard = document.querySelector('#resolution-card');
 const currentResolution = document.querySelector('#current-resolution');
 const currentFps = document.querySelector('#current-fps');
 const availableQualities = document.querySelector('#available-qualities');
+const qualitySelection = document.querySelector('#quality-selection');
 const codecCard = document.querySelector('#codec-card');
 const codecSummary = document.querySelector('#codec-summary');
 const videoCodec = document.querySelector('#video-codec');
@@ -34,6 +35,7 @@ const audioSummary = document.querySelector('#audio-summary');
 const audioLevel = document.querySelector('#audio-level');
 const audioStatus = document.querySelector('#audio-status');
 const audioObservation = document.querySelector('#audio-observation');
+const audioSampled = document.querySelector('#audio-sampled');
 const audioCoverage = document.querySelector('#audio-coverage');
 const localizedNumberFormatter = new Intl.NumberFormat('tr-TR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
@@ -45,7 +47,7 @@ function formatSeconds(milliseconds) {
 const statusCopy = {
   queued: ['Kuyrukta', 'Test ortamı hazırlanıyor…'],
   starting: ['Başlıyor', 'Twitch oynatıcısı açılıyor…'],
-  running: ['Test ediliyor', 'Yayın 30 saniye gözlemleniyor…'],
+  running: ['Test ediliyor', 'Yayın gözlemleniyor…'],
   online: ['Yayın açık', 'Yayın test ortamında oynatılıyor…'],
   offline: ['Yayın çevrimdışı', 'Kanal test sırasında çevrimdışı göründü.'],
   unavailable: ['Test tamamlanamadı', 'Oynatma verisi alınamadı.'],
@@ -81,12 +83,15 @@ function unavailableMessage(job) {
 
 function updateJob(job) {
   panel.dataset.state = job.result?.state || job.state;
-  const [label, message] = statusCopy[job.result?.state] || statusCopy[job.state] || statusCopy.running;
+  const durationSeconds = Number.isFinite(job.durationSeconds) ? job.durationSeconds : 30;
+  const [label, defaultMessage] = statusCopy[job.result?.state] || statusCopy[job.state] || statusCopy.running;
   statusLabel.textContent = label;
-  progressMessage.textContent = message;
-  const seconds = Math.min(30, Math.round(job.state === 'complete' ? job.result?.observedSeconds || 0 : job.elapsedSeconds || 0));
-  elapsedTime.textContent = `${seconds} / 30 sn`;
-  progressBar.style.width = `${Math.min(100, seconds / 30 * 100)}%`;
+  progressMessage.textContent = job.state === 'running'
+    ? `Yayın ${durationSeconds} saniye gözlemleniyor…`
+    : defaultMessage;
+  const seconds = Math.min(durationSeconds, Math.round(job.state === 'complete' ? job.result?.observedSeconds || 0 : job.elapsedSeconds || 0));
+  elapsedTime.textContent = `${seconds} / ${durationSeconds} sn`;
+  progressBar.style.width = `${Math.min(100, seconds / durationSeconds * 100)}%`;
 
   if (job.state === 'complete') {
     const state = job.result?.state;
@@ -132,6 +137,16 @@ function updateJob(job) {
     currentFps.textContent = Number.isFinite(resolution?.fps) ? `${Math.round(resolution.fps)} FPS` : 'Bilgi alınamadı';
     const qualities = Array.isArray(resolution?.available) ? [...new Set(resolution.available)] : [];
     availableQualities.textContent = qualities.length ? qualities.join(', ') : 'Seçenek bilgisi alınamadı';
+    if (resolution?.requestedQuality) {
+      const status = resolution.qualitySelectionStatus === 'selected'
+        ? 'oynatıcıda seçildi'
+        : resolution.qualitySelectionStatus === 'failed' ? 'seçilemedi' : 'oynatıcıda doğrulanamadı';
+      qualitySelection.textContent = `İstenen kalite: ${resolution.requestedQuality} · mevcut kalite: ${resolution.selectedQuality || status}`;
+    } else {
+      qualitySelection.textContent = job.platform === 'twitch'
+        ? 'Oynatıcıdan 1080p veya kaynak seçeneği alınamadı.'
+        : 'Kick oynatıcısında kaliteyi seçen belgelenmiş bir API yok.';
+    }
     codecCard.hidden = false;
     videoCodec.textContent = codecs?.video?.label || 'Bilgi alınamadı';
     videoCodecId.textContent = codecs?.video?.identifier || '';
@@ -162,13 +177,20 @@ function updateJob(job) {
       : audio?.status === 'no-signal'
         ? `< ${localizedNumberFormatter.format(audio.measurementFloorDbfs || -90)} dBFS`
         : 'Bilgi alınamadı';
+    const sampledAudioMilliseconds = Number.isFinite(audio?.sampledMilliseconds)
+      ? audio.sampledMilliseconds
+      : audio?.observationMilliseconds;
     audioObservation.textContent = formatSeconds(audio?.observationMilliseconds);
+    audioSampled.textContent = formatSeconds(sampledAudioMilliseconds);
     audioCoverage.textContent = Number.isFinite(audio?.coveragePercent)
       ? `%${localizedNumberFormatter.format(audio.coveragePercent)}`
       : 'Bilgi alınamadı';
-    audioSummary.hidden = audio?.status !== 'unavailable';
-    audioSummary.textContent = 'Oynatıcı ses örneklerine erişim sağlamadı veya ölçüm kapsaması yetersizdi.';
-    progressBar.style.width = complete ? '100%' : `${Math.min(100, observedSeconds / 30 * 100)}%`;
+    const partialAudioMeasurement = audio?.coverageStatus === 'partial';
+    audioSummary.hidden = audio?.status !== 'unavailable' && !partialAudioMeasurement;
+    audioSummary.textContent = partialAudioMeasurement
+      ? `Kısmi ölçüm: ${formatSeconds(sampledAudioMilliseconds)} ses örneği alındı; dBFS yalnızca örneklenen süreyi kapsar.`
+      : 'Oynatıcı ses örneklerine erişim sağlamadı veya en az 5 saniyelik geçerli örnek toplanamadı.';
+    progressBar.style.width = complete ? '100%' : `${Math.min(100, observedSeconds / durationSeconds * 100)}%`;
     submitButton.disabled = false;
     submitButton.querySelector('span:first-child').textContent = 'Yeniden test et';
   } else {
@@ -199,7 +221,8 @@ form.addEventListener('submit', async (event) => {
   panel.dataset.state = 'queued';
   statusLabel.textContent = statusCopy.queued[0];
   progressMessage.textContent = statusCopy.queued[1];
-  elapsedTime.textContent = '0 / 30 sn';
+  const durationSeconds = Number(form.querySelector('input[name="durationSeconds"]:checked')?.value) || 30;
+  elapsedTime.textContent = `0 / ${durationSeconds} sn`;
   progressBar.style.width = '0%';
   submitButton.disabled = true;
   submitButton.querySelector('span:first-child').textContent = 'Test başlıyor…';
@@ -208,7 +231,7 @@ form.addEventListener('submit', async (event) => {
     const response = await fetch('/api/tests', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ url: input.value }),
+      body: JSON.stringify({ url: input.value, durationSeconds }),
     });
     const result = await readJsonResponse(response);
     if (!response.ok) throw new Error(result.error || 'Test başlatılamadı.');
@@ -220,4 +243,3 @@ form.addEventListener('submit', async (event) => {
     submitButton.querySelector('span:first-child').textContent = 'Yayını test et';
   }
 });
-
