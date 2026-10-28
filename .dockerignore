@@ -1,0 +1,10 @@
+.git
+.gitignore
+.scratch
+docs
+node_modules
+playwright-report
+test-results
+tests
+Thumbs.db
+
