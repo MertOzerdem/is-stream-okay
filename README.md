@@ -1,6 +1,7 @@
-# Is Stream Okay
+# Is Stream Okay 
 
 A no-login Twitch and Kick stream check that runs in a server-side browser. It accepts a channel URL, opens the platform's approved player from the test server, and observes playback for about 30 seconds.
+https://is-stream-okay.onrender.com/
 
 ## Run locally
 
